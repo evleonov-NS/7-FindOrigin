@@ -1,33 +1,5 @@
 import type { ExtractedFacts } from "@/types";
-import { extractFactsByAi } from "@/lib/facts/extractAi";
-import { extractFactsByRules } from "@/lib/facts/extractRules";
-
-function unique(items: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const item of items) {
-    const key = item.trim();
-    if (!key) continue;
-    const normalized = key.toLowerCase();
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-    result.push(key);
-  }
-  return result;
-}
-
-function mergeFacts(
-  primary: ExtractedFacts,
-  fallback: ExtractedFacts,
-): ExtractedFacts {
-  return {
-    claims: unique([...primary.claims, ...fallback.claims]).slice(0, 5),
-    dates: unique([...primary.dates, ...fallback.dates]),
-    numbers: unique([...primary.numbers, ...fallback.numbers]).slice(0, 15),
-    names: unique([...primary.names, ...fallback.names]).slice(0, 10),
-    links: unique([...primary.links, ...fallback.links]),
-  };
-}
+import { AiExtractError, extractFactsByAi } from "@/lib/facts/extractAi";
 
 function isEmpty(facts: ExtractedFacts): boolean {
   return (
@@ -40,19 +12,16 @@ function isEmpty(facts: ExtractedFacts): boolean {
 }
 
 /**
- * Извлекает факты: AI (если доступен) + правила как дополнение/fallback.
+ * Извлекает факты только через AI (без rule-based предварительного анализа).
  */
 export async function extractFacts(text: string): Promise<ExtractedFacts> {
-  const rules = extractFactsByRules(text);
+  const facts = await extractFactsByAi(text);
 
-  try {
-    const ai = await extractFactsByAi(text);
-    if (ai && !isEmpty(ai)) {
-      return mergeFacts(ai, rules);
-    }
-  } catch (error) {
-    console.error("AI fact extraction error:", error);
+  if (isEmpty(facts)) {
+    throw new AiExtractError(
+      "AI не нашёл в тексте утверждений, дат, чисел, имён или ссылок.",
+    );
   }
 
-  return rules;
+  return facts;
 }

@@ -32,6 +32,10 @@ export function formatNormalizeError(reason: string): string {
   return `Не удалось подготовить текст для анализа.\n\n${reason}`;
 }
 
+export function formatAiError(reason: string): string {
+  return `Не удалось выделить факты через AI.\n\n${reason}`;
+}
+
 export function formatFactsReply(
   facts: ExtractedFacts,
   sourceType: string,
@@ -42,7 +46,7 @@ export function formatFactsReply(
       : `${title}:\n• не найдено`;
 
   return [
-    "Факты для поиска (этап до поиска источников):",
+    "Факты для поиска (AI):",
     `Тип ввода: ${sourceType === "telegram_post" ? "Telegram-пост" : "текст"}`,
     "",
     section("Ключевые утверждения", facts.claims),

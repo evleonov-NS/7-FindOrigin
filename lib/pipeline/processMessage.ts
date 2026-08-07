@@ -1,4 +1,6 @@
+import { AiConfigError } from "@/lib/ai/config";
 import { extractFacts } from "@/lib/facts/extract";
+import { AiExtractError } from "@/lib/facts/extractAi";
 import { NormalizeError, normalizeInput } from "@/lib/input/normalize";
 import { sendMessage } from "@/lib/telegram/client";
 import {
@@ -6,6 +8,7 @@ import {
   SEARCHING_MESSAGE,
   START_MESSAGE,
   UNSUPPORTED_MESSAGE,
+  formatAiError,
   formatFactsReply,
   formatNormalizeError,
 } from "@/lib/telegram/messages";
@@ -57,6 +60,11 @@ export async function processMessage(message: TelegramMessage): Promise<void> {
   } catch (error) {
     if (error instanceof NormalizeError) {
       await sendMessage(chatId, formatNormalizeError(error.message));
+      return;
+    }
+
+    if (error instanceof AiConfigError || error instanceof AiExtractError) {
+      await sendMessage(chatId, formatAiError(error.message));
       return;
     }
 

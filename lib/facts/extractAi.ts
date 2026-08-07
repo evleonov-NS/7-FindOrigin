@@ -1,3 +1,4 @@
+import { getAiConfig } from "@/lib/ai/config";
 import type { ExtractedFacts } from "@/types";
 
 interface OpenAiChatResponse {
@@ -8,6 +9,13 @@ interface OpenAiChatResponse {
   }>;
 }
 
+export class AiExtractError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiExtractError";
+  }
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -16,7 +24,8 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function parseFactsJson(content: string): ExtractedFacts | null {
+/** Разбирает JSON-ответ модели в ExtractedFacts. */
+export function parseFactsJson(content: string): ExtractedFacts | null {
   const trimmed = content.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const jsonText = fenced?.[1]?.trim() ?? trimmed;
@@ -36,28 +45,27 @@ function parseFactsJson(content: string): ExtractedFacts | null {
 }
 
 /**
- * Извлекает факты через OpenAI-совместимый Chat Completions API.
- * Возвращает null, если ключ не задан или ответ разобрать не удалось.
+ * Извлекает факты через OpenAI-совместимый Chat Completions API
+ * (OpenRouter: модель openai/gpt-4o-mini по умолчанию).
  */
-export async function extractFactsByAi(
-  text: string,
-): Promise<ExtractedFacts | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
+export async function extractFactsByAi(text: string): Promise<ExtractedFacts> {
+  const { apiKey, baseUrl, model, siteUrl, appName } = getAiConfig();
 
-  const baseUrl = (
-    process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1"
-  ).replace(/\/$/, "");
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  if (baseUrl.includes("openrouter.ai")) {
+    headers["X-Title"] = appName;
+    if (siteUrl) {
+      headers["HTTP-Referer"] = siteUrl;
+    }
+  }
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       model,
       temperature: 0,
@@ -68,7 +76,7 @@ export async function extractFactsByAi(
           content: [
             "Ты извлекаешь факты из текста для дальнейшего поиска первоисточника.",
             "Верни строго JSON-объект с полями:",
-            'claims (string[]) — ключевые утверждения',
+            "claims (string[]) — ключевые утверждения",
             "dates (string[]) — даты",
             "numbers (string[]) — числа и величины",
             "names (string[]) — имена людей/организаций",
@@ -86,15 +94,22 @@ export async function extractFactsByAi(
 
   if (!response.ok) {
     const body = await response.text();
-    console.error("OpenAI extract failed:", response.status, body);
-    return null;
+    console.error("AI extract failed:", response.status, body);
+    throw new AiExtractError(
+      `AI API вернул ошибку ${response.status}. Проверьте ключ, модель и баланс.`,
+    );
   }
 
   const data = (await response.json()) as OpenAiChatResponse;
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
-    return null;
+    throw new AiExtractError("AI вернул пустой ответ.");
   }
 
-  return parseFactsJson(content);
+  const facts = parseFactsJson(content);
+  if (!facts) {
+    throw new AiExtractError("Не удалось разобрать ответ AI как JSON с фактами.");
+  }
+
+  return facts;
 }
