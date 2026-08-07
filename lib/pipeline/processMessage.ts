@@ -2,15 +2,21 @@ import { AiConfigError } from "@/lib/ai/config";
 import { extractFacts } from "@/lib/facts/extract";
 import { AiExtractError } from "@/lib/facts/extractAi";
 import { NormalizeError, normalizeInput } from "@/lib/input/normalize";
+import { buildSearchQueries } from "@/lib/search/buildQueries";
+import { SearchError, searchWithSerper } from "@/lib/search/serper";
+import { RankAiError, rankSourcesWithAi } from "@/lib/sources/rankAi";
 import { sendMessage } from "@/lib/telegram/client";
 import {
   HELP_MESSAGE,
-  SEARCHING_MESSAGE,
   START_MESSAGE,
+  STATUS_ANALYZE,
+  STATUS_EXTRACT,
+  STATUS_SEARCH,
   UNSUPPORTED_MESSAGE,
   formatAiError,
-  formatFactsReply,
+  formatAnalysisReply,
   formatNormalizeError,
+  formatSearchError,
 } from "@/lib/telegram/messages";
 import type { TelegramMessage } from "@/types";
 
@@ -19,8 +25,16 @@ function getCommand(text: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
- * Полный цикл обработки сообщения до этапа поиска источников.
+ * Полный цикл: нормализация → факты → Serper → AI-оценка → ответ.
  */
 export async function processMessage(message: TelegramMessage): Promise<void> {
   const chatId = message.chat.id;
@@ -48,30 +62,58 @@ export async function processMessage(message: TelegramMessage): Promise<void> {
     return;
   }
 
-  await sendMessage(chatId, SEARCHING_MESSAGE);
-
   try {
+    await sendMessage(chatId, STATUS_ANALYZE);
     const normalized = await normalizeInput(text);
+
+    await sendMessage(chatId, STATUS_EXTRACT);
     const facts = await extractFacts(normalized.text);
-    await sendMessage(
-      chatId,
-      formatFactsReply(facts, normalized.sourceType),
+
+    await sendMessage(chatId, STATUS_SEARCH);
+    const queries = buildSearchQueries(normalized.text, facts);
+    const candidates = await searchWithSerper(queries);
+    const analysis = await rankSourcesWithAi(
+      normalized.text,
+      facts,
+      candidates,
     );
+
+    await sendMessage(chatId, formatAnalysisReply(analysis), {
+      parseMode: "HTML",
+    });
   } catch (error) {
-    if (error instanceof NormalizeError) {
-      await sendMessage(chatId, formatNormalizeError(error.message));
+    const name = errorName(error);
+    const messageText = errorMessage(error);
+
+    if (error instanceof NormalizeError || name === "NormalizeError") {
+      await sendMessage(chatId, formatNormalizeError(messageText));
       return;
     }
 
-    if (error instanceof AiConfigError || error instanceof AiExtractError) {
-      await sendMessage(chatId, formatAiError(error.message));
+    if (
+      error instanceof AiConfigError ||
+      error instanceof AiExtractError ||
+      name === "AiConfigError" ||
+      name === "AiExtractError"
+    ) {
+      await sendMessage(chatId, formatAiError(messageText));
+      return;
+    }
+
+    if (
+      error instanceof SearchError ||
+      error instanceof RankAiError ||
+      name === "SearchError" ||
+      name === "RankAiError"
+    ) {
+      await sendMessage(chatId, formatSearchError(messageText));
       return;
     }
 
     console.error("processMessage failed:", error);
     await sendMessage(
       chatId,
-      "Произошла ошибка при обработке. Попробуйте ещё раз чуть позже.",
+      `Произошла ошибка при обработке.\n\n${messageText}`,
     );
   }
 }

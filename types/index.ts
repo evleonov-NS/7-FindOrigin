@@ -18,8 +18,15 @@ export interface SourceCandidate {
   url: string;
   title: string;
   snippet: string;
+  relevance?: number;
   confidence?: number;
   reason?: string;
+}
+
+export interface AnalysisResult {
+  originalText: string;
+  summary: string;
+  sources: SourceCandidate[];
 }
 
 export interface TelegramChat {
