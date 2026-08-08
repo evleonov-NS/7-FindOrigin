@@ -8,10 +8,15 @@ function getBotToken(): string {
   return token;
 }
 
+export type TelegramReplyMarkup = Record<string, unknown>;
+
 export async function sendMessage(
   chatId: number,
   text: string,
-  options?: { parseMode?: "HTML" | "Markdown" | "MarkdownV2" },
+  options?: {
+    parseMode?: "HTML" | "Markdown" | "MarkdownV2";
+    replyMarkup?: TelegramReplyMarkup;
+  },
 ): Promise<void> {
   const token = getBotToken();
   const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
@@ -22,6 +27,7 @@ export async function sendMessage(
       text,
       disable_web_page_preview: true,
       ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
+      ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
     }),
   });
 

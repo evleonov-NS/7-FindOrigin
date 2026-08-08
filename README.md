@@ -1,14 +1,15 @@
 # FindOrigin
 
-Telegram-бот на Next.js: принимает текст или ссылку на публичный Telegram-пост, выделяет факты через AI, ищет кандидатов через Serper и оценивает источники по смыслу.
+Telegram-бот и Mini App на Next.js: принимают текст или ссылку на публичный Telegram-пост, выделяют факты через AI, ищут кандидатов через Serper и оценивают источники по смыслу.
 
-Текущая реализация: этапы 0–6 из `PLAN.md`.
+Текущая реализация: этапы 0–6 из `PLAN.md` + UI Mini App.
 
 ## Стек
 
 - Next.js (App Router)
 - Деплой: Vercel
 - Webhook: `POST /api/telegram`
+- Mini App: `/app` + `POST /api/analyze`
 - AI: OpenRouter (`openai/gpt-4o-mini`)
 - Поиск: Serper (Google SERP API)
 
@@ -29,6 +30,7 @@ Copy-Item .env.example .env.local
 | `OPENAI_MODEL` | нет | по умолчанию `openai/gpt-4o-mini` |
 | `OPENAI_API_KEY` | да* | альтернатива OpenRouter |
 | `SERPER_API_KEY` | да | ключ поиска с [serper.dev](https://serper.dev) |
+| `PUBLIC_APP_URL` | да для кнопки Mini App | например `https://7-find-origin.vercel.app` |
 
 \* Нужен один из ключей: `OPENROUTER_API_KEY` или `OPENAI_API_KEY`.
 
@@ -38,7 +40,29 @@ Copy-Item .env.example .env.local
 2. Скопируйте API key в `SERPER_API_KEY`
 3. На Vercel добавьте ту же переменную и сделайте Redeploy
 
-`SEARCH_API_KEY` / `GOOGLE_CSE_ID` больше не используются (у новых Google CSE отключён поиск по всему интернету).
+### Telegram Mini App
+
+1. На Vercel задайте `PUBLIC_APP_URL=https://7-find-origin.vercel.app`
+2. Redeploy
+3. В [@BotFather](https://t.me/BotFather): `/mybots` → бот → **Bot Settings → Menu Button → Configure menu button**  
+   URL: `https://7-find-origin.vercel.app/app`
+4. В чате с ботом: `/start` — кнопка **Открыть FindOrigin** (inline WebApp)
+
+Проверка меню (PowerShell):
+
+```powershell
+$token = "<TELEGRAM_BOT_TOKEN>"
+Invoke-RestMethod -Method Post `
+  -Uri "https://api.telegram.org/bot$token/setChatMenuButton" `
+  -ContentType "application/json" `
+  -Body (@{
+    menu_button = @{
+      type = "web_app"
+      text = "FindOrigin"
+      web_app = @{ url = "https://7-find-origin.vercel.app/app" }
+    }
+  } | ConvertTo-Json -Depth 5)
+```
 
 ## Локальный запуск
 
@@ -72,9 +96,9 @@ Invoke-RestMethod -Uri "https://api.telegram.org/bot$token/getWebhookInfo"
 
 ## Как пользоваться ботом
 
-1. `/start` или `/help` — инструкция
-2. Отправьте текст или ссылку `https://t.me/channel/123`
-3. Бот пришлёт статусы анализа/поиска, затем HTML-отчёт с 1–3 источниками (релевантность и уверенность)
+1. `/start` или `/help` — инструкция; можно открыть Mini App
+2. Отправьте текст или ссылку `https://t.me/channel/123` (в боте или в Mini App)
+3. Получите 1–3 источника с релевантностью и уверенностью
 
 ## Тесты
 
@@ -92,6 +116,8 @@ lib/ai/             # конфиг и chat completions
 lib/facts/          # извлечение фактов через AI
 lib/search/         # запросы и Serper
 lib/sources/        # AI-ранжирование источников
-lib/pipeline/       # обработка сообщения
+lib/pipeline/       # analyze + обработка сообщения бота
+app/app/            # Telegram Mini App UI
+app/api/analyze/    # API для Mini App
 types/              # общие типы
 ```

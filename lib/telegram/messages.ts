@@ -7,7 +7,7 @@ export const START_MESSAGE = [
   "• текст сообщения или утверждения",
   "• ссылку на публичный Telegram-пост",
   "",
-  "Я найду возможные источники и оценю уверенность по смыслу.",
+  "Или откройте Mini App кнопкой ниже — тот же поиск в удобном интерфейсе.",
   "Команда /help — краткая справка.",
 ].join("\n");
 
@@ -15,6 +15,7 @@ export const HELP_MESSAGE = [
   "Как пользоваться FindOrigin:",
   "",
   "1. Пришлите текст или ссылку вида https://t.me/channel/123",
+  "   или откройте Mini App",
   "2. Дождитесь статусов анализа и поиска",
   "3. Получите 1–3 источника с релевантностью и уверенностью",
   "",
@@ -22,6 +23,30 @@ export const HELP_MESSAGE = [
   "• приватные Telegram-посты недоступны",
   "• слишком короткий или пустой текст обработать нельзя",
 ].join("\n");
+
+/** URL Mini App: PUBLIC_APP_URL или VERCEL_URL. */
+export function getMiniAppUrl(): string | null {
+  const fromEnv = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (fromEnv) {
+    return `${fromEnv}/app`;
+  }
+  const vercel = process.env.VERCEL_URL?.trim().replace(/\/$/, "");
+  if (vercel) {
+    const host = vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    return `${host}/app`;
+  }
+  return null;
+}
+
+export function getStartReplyMarkup(): Record<string, unknown> | undefined {
+  const url = getMiniAppUrl();
+  if (!url) return undefined;
+  return {
+    inline_keyboard: [
+      [{ text: "Открыть FindOrigin", web_app: { url } }],
+    ],
+  };
+}
 
 export const UNSUPPORTED_MESSAGE =
   "Пока я понимаю только текстовые сообщения или ссылки на публичные Telegram-посты. Пришлите текст или ссылку.";

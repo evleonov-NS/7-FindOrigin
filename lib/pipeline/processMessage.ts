@@ -1,10 +1,9 @@
 import { AiConfigError } from "@/lib/ai/config";
-import { extractFacts } from "@/lib/facts/extract";
 import { AiExtractError } from "@/lib/facts/extractAi";
-import { NormalizeError, normalizeInput } from "@/lib/input/normalize";
-import { buildSearchQueries } from "@/lib/search/buildQueries";
-import { SearchError, searchWithSerper } from "@/lib/search/serper";
-import { RankAiError, rankSourcesWithAi } from "@/lib/sources/rankAi";
+import { NormalizeError } from "@/lib/input/normalize";
+import { analyzeText } from "@/lib/pipeline/analyze";
+import { SearchError } from "@/lib/search/serper";
+import { RankAiError } from "@/lib/sources/rankAi";
 import { sendMessage } from "@/lib/telegram/client";
 import {
   HELP_MESSAGE,
@@ -17,6 +16,7 @@ import {
   formatAnalysisReply,
   formatNormalizeError,
   formatSearchError,
+  getStartReplyMarkup,
 } from "@/lib/telegram/messages";
 import type { TelegramMessage } from "@/types";
 
@@ -47,7 +47,9 @@ export async function processMessage(message: TelegramMessage): Promise<void> {
 
   const command = getCommand(text);
   if (command === "start") {
-    await sendMessage(chatId, START_MESSAGE);
+    await sendMessage(chatId, START_MESSAGE, {
+      replyMarkup: getStartReplyMarkup(),
+    });
     return;
   }
   if (command === "help") {
@@ -63,20 +65,17 @@ export async function processMessage(message: TelegramMessage): Promise<void> {
   }
 
   try {
-    await sendMessage(chatId, STATUS_ANALYZE);
-    const normalized = await normalizeInput(text);
-
-    await sendMessage(chatId, STATUS_EXTRACT);
-    const facts = await extractFacts(normalized.text);
-
-    await sendMessage(chatId, STATUS_SEARCH);
-    const queries = buildSearchQueries(normalized.text, facts);
-    const candidates = await searchWithSerper(queries);
-    const analysis = await rankSourcesWithAi(
-      normalized.text,
-      facts,
-      candidates,
-    );
+    const analysis = await analyzeText(text, {
+      onProgress: async (step) => {
+        if (step === "normalize") {
+          await sendMessage(chatId, STATUS_ANALYZE);
+        } else if (step === "extract") {
+          await sendMessage(chatId, STATUS_EXTRACT);
+        } else if (step === "search") {
+          await sendMessage(chatId, STATUS_SEARCH);
+        }
+      },
+    });
 
     await sendMessage(chatId, formatAnalysisReply(analysis), {
       parseMode: "HTML",

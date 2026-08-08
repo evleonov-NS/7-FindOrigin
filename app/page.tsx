@@ -7,8 +7,8 @@ export default function Home() {
         <div className={styles.intro}>
           <h1>FindOrigin</h1>
           <p>
-            Telegram-бот для поиска первоисточника информации. Webhook:{" "}
-            <code>/api/telegram</code>
+            Telegram-бот и Mini App для поиска первоисточника. Webhook:{" "}
+            <code>/api/telegram</code>, Mini App: <code>/app</code>
           </p>
         </div>
       </main>
